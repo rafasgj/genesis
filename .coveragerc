@@ -1,0 +1,11 @@
+[run]
+omit =
+    .tox/*
+    .venv/*
+    venv/*
+    /usr/*
+    tests/*
+    features/*
+    fpi/schemas/env.py
+    */virtualenv/*
+    */.local/*
