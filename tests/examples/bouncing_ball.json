@@ -24,7 +24,7 @@
                  },
                  { "LinearMove": {
                       "speed": 5,
-                      "angle": 2,
+                      "angle": 27,
                       "position": [300, 200],
                       "limit_area": [25, 25, "600-25*2", "400-25*2"],
                       "events": [
