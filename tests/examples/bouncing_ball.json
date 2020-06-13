@@ -1,0 +1,77 @@
+{
+  "game_info": {
+    "name": "Bouncing Ball",
+    "author": "Rafael Guterres Jeffman",
+    "email": "rafasgj@gmail.com",
+    "description": "A bouncing ball example.",
+    "licence": "GPLv3",
+    "license_url": "https://www.gnu.org/licenses/gpl-3.0.en.html",
+    "copyright": "(C) 2020 Rafael Guterres Jeffman"
+  },
+  "interface": {
+    "screen": {
+        "width": 600,
+        "height": 400
+    }
+  },
+  "game": {
+      "objects": [
+         { "ball": {
+              "behaviors": [
+                 { "Circle": {
+                      "radius": 25
+                    }
+                 },
+                 { "LinearMove": {
+                      "speed": 5,
+                      "angle": 2,
+                      "position": [300, 200],
+                      "limit_area": [25, 25, "600-25*2", "400-25*2"],
+                      "events": [
+                         { "offlimits": [
+                             { "do": "flip_horizontal_movement",
+                               "when": "any (right, left) in offlimits"
+                             },
+                             { "do": "flip_vertital_movement",
+                               "when": "any (top, bottom) in offlimits"
+                             },
+                           ]
+                         }
+                       ]
+                    }
+                  }
+              ]
+           }
+         }
+       ]
+  },
+  "levels": [
+     { "single": [
+        { "start": [
+           { "spawn": {
+                "object": "ball",
+                "at": "screen.center"
+              }
+            }
+          ]
+        },
+        { "timed": [
+           { "method": {
+               "when": "30s",
+               "name": "game.over"
+              }
+           },
+           { "method": {
+                "every": "5s",
+                "name": "ball.color",
+                "values": {
+                   "color": "function.choice([(255,0,0), (0,255,0), (0,0,255)])"
+                 }
+              },
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
