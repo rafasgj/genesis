@@ -1,0 +1,42 @@
+language: python
+
+jobs:
+  include:
+    - name: "Python on Linux"
+      python:
+      - 3.8
+      - 3.7
+    - name: "Python on macOS"
+      os: osx
+      language: generic
+      env:
+        - OS_X_PYTHON_VERSION=python3.7
+        - HOMEBREW_NO_INSTALL_CLEANUP=1
+        - HOMEBREW_NO_ANALYTICS=1
+      addons:
+        homebrew:
+          packages: python3
+    - name: "Python on Windows"
+      os: windows
+      language: shell
+      before_install:
+        - choco install python --version 3.8.0
+      env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+
+install:
+  - PYTHON="python"
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then PYTHON="python3" ; fi
+  - echo "Using `$PYTHON --version`"
+  - $PYTHON -m pip install --upgrade pip
+  - $PYTHON -m pip install -r requirements-dev.txt
+  # - $PYTHON -m pip install -r requirements.txt
+
+script:
+  - find . \( -path './tests/*' -o -path './genesis/*' -o -path './features/*' \) -a -name "*.py" | xargs $PYTHON -m black -l 79 --check setup.py
+  - find . \( -path './tests/*' -o -path './genesis/*' -o -path './features/*' \) -a -name "*.py" | xargs $PYTHON -m flake8 setup.py
+  - find . \( -path './tests/*' -o -path './genesis/*' -o -path './features/*' \) -a -name "*.py" | xargs $PYTHON -m pylint -d fixme
+  # - $PYTHON -m coverage erase
+  # - $PYTHON -m coverage run -a -m behave
+  # - $PYTHON -m coverage run -a -m pytest
+  # - $PYTHON -m coverage report --show-missing --skip-covered
+  # - if [ "$TRAVIS_OS_NAME" != "windows" ]; then $($PYTHON -m coverage json -o - | $PYTHON -c 'import json,sys; data=json.load(sys.stdin); print("{percent_covered:.0f}".format(**data["totals"]))' | xargs test 90 -lt); fi
