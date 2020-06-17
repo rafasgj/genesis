@@ -105,14 +105,14 @@ class Collider:
                                 self,
                                 event="collision",
                                 against=[obj.name],
-                                **event_data
+                                **event_data,
                             )
                             self.emit(event)  # TODO: add proper values
                             event = GameEvent(
                                 obj,
                                 event="collision",
                                 against=[self.name],
-                                **event_data
+                                **event_data,
                             )
                             obj.emit(event)  # TODO: add proper values
 

@@ -1,6 +1,8 @@
 Genesis Game Design Engine
 ==========================
 
+[![Build Status](https://travis-ci.com/rafasgj/genesis.svg?branch=master)](https://travis-ci.com/rafasgj/genesis)
+
 `Genesis` is a tool designed to aid in teaching game design. It is not a
 full fledged game engine (not even for 2D games). It is not a library
 to develop games. It does not even make it easier to create games. If
@@ -52,8 +54,17 @@ $ python -m genesis tests/examples/multi_ball.yml
 `Genesis` requires Python 3, adapt the commands to use `python3` if your
 system requires it.
 
+
+Using `repl.it`
+---------------
+
+Genesis can be used under [repl.it], it even has a command line argument
+to simulate it, but be warned that the experience is far from smooth.
+
 <!--links -->
 [godot]: https://godotengine.org
 [pygame]: https://pygame.org
 [Ogre]: https://ogre3dengine.org
 [homebrew]: https://brew.sh
+[repl.it]: https://repl.it
+

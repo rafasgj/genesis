@@ -57,11 +57,18 @@ class GameScript:
 class Game:
     """Class game."""
 
-    def __init__(self, script):
+    def __init__(self, script, **options):
         """Initialize object."""
+        logger.debug(
+            msg="Game options:\n\t{}".format(
+                "\n\t".join(
+                    ["- {}: {}".format(k, v) for k, v in options.items()]
+                )
+            )
+        )
         self.__script = GameScript(script)
         self.__clock = pygame.time.Clock()
-        self.__fps = 30  # TODO: make this configurable.
+        self.__fps = options.get("fps", 30)
         self.__game_classes = {}
         self.__levels = []
         self.event_handlers = {}
