@@ -10,68 +10,83 @@
   },
   "interface": {
     "screen": {
-        "width": 600,
-        "height": 400
+      "width": 600,
+      "height": 400
     }
   },
   "game": {
-      "objects": [
-         { "ball": {
-              "behaviors": [
-                 { "Circle": {
-                      "radius": 25
-                    }
-                 },
-                 { "LinearMove": {
-                      "speed": 5,
-                      "angle": 27,
-                      "position": [300, 200],
-                      "limit_area": [25, 25, "600-25*2", "400-25*2"],
-                      "events": [
-                         { "offlimits": [
-                             { "do": "flip_horizontal_movement",
-                               "when": "any (right, left) in offlimits"
-                             },
-                             { "do": "flip_vertital_movement",
-                               "when": "any (top, bottom) in offlimits"
-                             },
-                           ]
-                         }
-                       ]
-                    }
+    "objects": [
+      {
+        "ball": {
+          "behaviors": [
+            {
+              "Circle": {
+                "radius": 25
+              }
+            },
+            {
+              "LinearMove": {
+                "speed": 10,
+                "angle": 27,
+                "position": "screen.center"
+              }
+            },
+            {
+              "LimitMovement": {
+                "limit_area": "screen.client_area",
+                "events": [
+                  {
+                    "offlimits": [
+                      {
+                        "when": "any (right, left) in offlimits.limit",
+                        "do": "flip_horizontal_movement"
+                      },
+                      {
+                        "when": "any (top, bottom) in offlimits.limit",
+                        "do": "flip_vertical_movement"
+                      }
+                    ]
                   }
-              ]
-           }
-         }
-       ]
-  },
-  "levels": [
-     { "single": [
-        { "start": [
-           { "spawn": {
-                "object": "ball",
-                "at": "screen.center"
+                ]
               }
-            }
-          ]
-        },
-        { "timed": [
-           { "method": {
-               "when": "30s",
-               "name": "game.over"
-              }
-           },
-           { "method": {
-                "every": "5s",
-                "name": "ball.color",
-                "values": {
-                   "color": "function.choice([(255,0,0), (0,255,0), (0,0,255)])"
-                 }
-              },
             }
           ]
         }
-      ]
-    }
-  ]
+      }
+    ],
+    "levels": [
+      {
+        "single": {
+          "start": [
+            {
+              "spawn": [
+                {
+                  "object_name": "ball"
+                }
+              ]
+            }
+          ],
+          "events": [
+            {
+              "time": [
+                {
+                  "when": "30s",
+                  "do": "game_over"
+                }
+              ]
+            },
+            {
+              "repeat": [
+                {
+                  "start": "5s",
+                  "every": "3s",
+                  "do": "ball.color = function.choice([(255,0,0), (0,255,0), (0,0,255)])"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
