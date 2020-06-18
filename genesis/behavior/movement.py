@@ -133,7 +133,7 @@ class LinearMove(Movable):
         Movable.__init__(self, **options)
         self.__speed = options.get("speed", 5)
         angle = options.get("angle", 0)
-        self.__angle = 2 * math.pi - (math.pi / 180.0 * angle)
+        self.__angle = 2 * math.pi - math.radians(angle)
         self.__dx = 0
         self.__dy = 0
 
@@ -165,9 +165,9 @@ class LinearMove(Movable):
     @property
     def angle(self):
         """Retrieve the object movement angle, in degrees."""
-        return self.__angle * 180.0 / math.pi
+        return math.degrees(self.__angle)
 
     @angle.setter
     def angle(self, value):
         """Set the movement angle, in degress."""
-        self.__angle = 2 * math.pi - (math.pi / 180.0 * value)
+        self.__angle = 2 * math.pi - math.radians(value)
