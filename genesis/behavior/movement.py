@@ -144,11 +144,11 @@ class LinearMove(Movable):
         delta_y = self.speed * math.sin(angle)
         return (delta_x, delta_y)
 
-    def flip_horizontal_movement(self):
+    def flip_horizontal_movement(self, **_):
         """Change movement angle so that in reverse horizontal direction."""
         self.__angle = (2 * math.pi + (math.pi - self.__angle)) % (2 * math.pi)
 
-    def flip_vertical_movement(self):
+    def flip_vertical_movement(self, **_):
         """Change movement angle so that in reverse horizontal direction."""
         self.__angle = (2 * math.pi + (-1 * self.__angle)) % (2 * math.pi)
 

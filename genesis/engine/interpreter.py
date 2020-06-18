@@ -19,7 +19,17 @@ class GenesisIntepreter:
         "/": operator.truediv,
         "//": operator.floordiv,
         "%": operator.mod,
-        "^": operator.xor,
+    }
+
+    assignment_ops = {
+        "=": lambda _, value: value,
+        "+=": operator.iadd,
+        "-=": operator.isub,
+        "*=": operator.imul,
+        "//=": operator.ifloordiv,
+        "/=": operator.itruediv,
+        "%=": operator.imod,
+        "**=": operator.ipow,
     }
 
     commands = {
@@ -60,6 +70,58 @@ class GenesisIntepreter:
             return False
         else:
             return True
+
+    def __get_reference(self, identifier, **params):
+        objname, *member = identifier.split(".")
+        if objname == "self":
+            objname = member[0]
+            member = member[1:]
+
+        obj = params.get("caller") or self.__game.get_object(objname)
+        if not member:
+            if objname != obj.name:
+                return (obj, objname)
+            return (obj, None)
+        raise NotImplementedError("Member reference not implemented.")
+
+    def execute(self, statement, **params):
+        """Execute an action statement."""
+        self.__extra_parameters = params.copy()
+
+        with StringIO(statement) as stream:
+            self.tokenizer = tokenize.generate_tokens(stream.readline)
+            # identifier
+            next_token = self.__next_token()
+            token, identifier = self.parse_identifier(next_token)
+            # assign expression
+            token, assignment = self.__parse_assignment(token)
+            if token[0] != tokenize.ENDMARKER:
+                raise Exception("Invalid statement: `%s`" % statement)
+            member_acs = self.__get_reference(identifier, **params)
+            # if member_acs is None:
+            #     raise Exception("Invalid reference: %s" % identifier)
+            object_ref, member_name = member_acs
+            if assignment:
+                oper, value = assignment
+                original = getattr(object_ref, member_name)
+                setattr(
+                    object_ref,
+                    member_name,
+                    GenesisIntepreter.assignment_ops[oper](original, value),
+                )
+            else:
+                value = getattr(object_ref, member_name)(**params)
+            self.tokenizer = None
+            return value
+
+    def __parse_assignment(self, next_token):
+        """Parse an assignment operation."""
+        token, oper, *_ = next_token
+        result = None
+        if token == tokenize.OP and oper in GenesisIntepreter.assignment_ops:
+            next_token, value = self.__parse_expression(self.__next_token())
+            result = (oper, value)
+        return next_token, result
 
     def evaluate_expression(self, expression, **extra_parameters):
         """Evaluate an expression."""
@@ -147,9 +209,8 @@ class GenesisIntepreter:
             next_token = self.__next_token()
         elif token == tokenize.OP:
             if val == "(":
-                next_token, value = self.__parse_expression(
-                    self.__next_token()
-                )
+                next_token = self.__next_token()
+                next_token, value = self.__parse_expression(next_token)
                 token, val, *_ = next_token
                 if token != tokenize.OP and val != ")":
                     raise Exception("Expected ')' got '%s'." % val)
@@ -157,15 +218,30 @@ class GenesisIntepreter:
             else:
                 raise Exception("Expected '(' got '%s'." % val)
         elif token == tokenize.NAME:
-            next_token, qualified_id = self.parse_identifier(next_token)
-            if qualified_id in GenesisIntepreter.commands:
-                cmdname = GenesisIntepreter.commands[qualified_id]
-                cmd = getattr(self, cmdname)
-                next_token, value = cmd(next_token, __command__=qualified_id)
-            else:
-                value = self.__game.get_object_value(qualified_id)
+            next_token, value = self.__parse_number_from_name(next_token)
         else:
             raise Exception("Invalid element `%s`." % val)
+        return next_token, value
+
+    def __parse_number_from_name(self, next_token):
+        # TODO: Currently only parsing properties, could also parse methods.
+        next_token, qualified_id = self.parse_identifier(next_token)
+        if qualified_id in GenesisIntepreter.commands:
+            cmdname = GenesisIntepreter.commands[qualified_id]
+            cmd = getattr(self, cmdname)
+            next_token, value = cmd(next_token, __command__=qualified_id)
+        else:
+            obj, *parts = qualified_id.split(".")
+            if obj not in self.__extra_parameters:
+                value = self.__game.get_object_value(qualified_id)
+            else:
+                obj = self.__extra_parameters[obj]
+                for part in parts:
+                    if part not in obj:
+                        msg = "Undefined identifier %s" % qualified_id
+                        raise Exception(msg)
+                    obj = obj[part]
+                value = obj
         return next_token, value
 
     def __next_token(self):

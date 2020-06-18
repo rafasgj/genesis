@@ -220,13 +220,10 @@ class Game:
             )
             del action["when"]
         if execute:
+            params["caller"] = obj
             for statement in statements:
                 logger.debug(msg="Executing statement: {}".format(statement))
-                method = getattr(obj, statement)
-                if action:
-                    method(**action)
-                else:
-                    method()
+                self.interpreter.execute(statement, **params)
 
     def get_object_value(self, name):
         """Return a `value` for an item."""
@@ -237,9 +234,17 @@ class Game:
                     if hasattr(value, part):
                         value = getattr(value, part)
                     else:
-                        raise Exception("Cannot access value for `%s`" % name)
+                        raise Exception("Invalid member name: `%s`" % name)
                 return value
-        raise Exception("Cannot access value for `%s`" % name)
+        raise Exception("Invalid object: `%s`" % name)
+
+    def get_object(self, name):
+        """Return a `value` for an item."""
+        obj, *_ = name.split(".")
+        for value in self.game_objects:
+            if value.name == obj:
+                return value
+        raise Exception("Invalid object: `%s`" % name)
 
     def __process_pygame_events(self):  # pylint: disable=no-self-use
         """Process game events."""
