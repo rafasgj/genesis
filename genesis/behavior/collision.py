@@ -20,7 +20,7 @@
 """Collision objects and algorithms."""
 
 import logging
-from math import sin, cos, atan2, copysign, radians
+from math import sin, cos, atan2, copysign, radians, degrees
 
 from genesis.objects import GameEvent
 
@@ -95,26 +95,28 @@ class Collider:
                     if func:
                         collision, point, angle = func(self.bounds, obj.bounds)
                         if collision:
-                            event_data = {"point": point, "angle": angle}
                             logger.debug(
                                 msg="Collision: {}:{}".format(
                                     self.name, obj.name
                                 )
                             )
+                            angle = 360 - ((360 + degrees(angle)) % 360.0)
+                            event_data = {"point": point, "angle": angle}
                             event = GameEvent(
                                 self,
                                 event="collision",
                                 against=[obj.name],
                                 **event_data,
                             )
-                            self.emit(event)  # TODO: add proper values
+                            self.emit(event)
+                            event_data = {"point": point, "angle": angle + 180}
                             event = GameEvent(
                                 obj,
                                 event="collision",
                                 against=[self.name],
                                 **event_data,
                             )
-                            obj.emit(event)  # TODO: add proper values
+                            obj.emit(event)
 
     class __Algo:
         # pylint: disable=invalid-name
