@@ -21,7 +21,7 @@
 
 import math
 from collections import defaultdict
-from genesis.objects import GameEvent
+from genesis.engine.events import GameEvent
 
 
 class Movable:
@@ -119,7 +119,7 @@ class LimitMovement:
                 delta_y = (limit_y + limit_height) - y
         if event_data:
             self.emit(  # pylint: disable=no-member
-                GameEvent(sender=self, event="offlimits", **event_data,)
+                GameEvent(sender=self, name="offlimits", **event_data,)
             )
 
         return (delta_x, delta_y)

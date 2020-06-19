@@ -33,16 +33,16 @@ class GenesisIntepreter:
     }
 
     commands = {
-        "all": "parse_command_all",
-        "any": "parse_command_any",
-        "in": "unexpected_command",
+        "all": "_parse_command_all",
+        "any": "_parse_command_any",
+        "in": "_unexpected_command",
     }
 
     def __init__(self, game):
         """Initialize interpreter."""
         self.__game = game
         self.tokenizer = None
-        self.__extra_parameters = None
+        self.__scope = None
 
     @staticmethod
     def as_number(value):
@@ -71,37 +71,35 @@ class GenesisIntepreter:
         else:
             return True
 
-    def __get_reference(self, identifier, **params):
-        objname, *member = identifier.split(".")
-        if objname == "self":
-            objname = member[0]
-            member = member[1:]
+    def execute(self, statement, **scope):
+        """
+        Parse and execute an action statement.
 
-        obj = params.get("caller") or self.__game.get_object(objname)
-        if not member:
-            if objname != obj.name:
-                return (obj, objname)
-            return (obj, None)
-        raise NotImplementedError("Member reference not implemented.")
+        Parameters:
+            statement:
+                The statement to be parsed.
+            scope:
+                Keyword arguments with the current scope variables.
+                If `name` is present, than the scope is considered an object
+                with that name.
 
-    def execute(self, statement, **params):
-        """Execute an action statement."""
-        self.__extra_parameters = params.copy()
+        An `statement` has the grammar:
+            statement: identifier [assignment_expression]
 
+        If the statement is no an assignment, it is considered an expression.
+        """
+        self.__scope = scope.copy()
         with StringIO(statement) as stream:
             self.tokenizer = tokenize.generate_tokens(stream.readline)
             # identifier
             next_token = self.__next_token()
-            token, identifier = self.parse_identifier(next_token)
+            next_token, identifier = self.__parse_identifier(next_token)
             # assign expression
-            token, assignment = self.__parse_assignment(token)
-            if token[0] != tokenize.ENDMARKER:
+            next_token, assignment = self.__parse_assignment(next_token)
+            if next_token[0] != tokenize.ENDMARKER:
                 raise Exception("Invalid statement: `%s`" % statement)
-            member_acs = self.__get_reference(identifier, **params)
-            # if member_acs is None:
-            #     raise Exception("Invalid reference: %s" % identifier)
-            object_ref, member_name = member_acs
             if assignment:
+                object_ref, member_name = self.__get_reference(identifier)
                 oper, value = assignment
                 original = getattr(object_ref, member_name)
                 setattr(
@@ -110,22 +108,13 @@ class GenesisIntepreter:
                     GenesisIntepreter.assignment_ops[oper](original, value),
                 )
             else:
-                value = getattr(object_ref, member_name)(**params)
+                value = self.__get_object_property(identifier)
             self.tokenizer = None
             return value
 
-    def __parse_assignment(self, next_token):
-        """Parse an assignment operation."""
-        token, oper, *_ = next_token
-        result = None
-        if token == tokenize.OP and oper in GenesisIntepreter.assignment_ops:
-            next_token, value = self.__parse_expression(self.__next_token())
-            result = (oper, value)
-        return next_token, result
-
-    def evaluate_expression(self, expression, **extra_parameters):
-        """Evaluate an expression."""
-        self.__extra_parameters = extra_parameters.copy()
+    def evaluate_expression(self, expression, **scope):
+        """Evaluate an expression, with the statement parser."""
+        self.__scope = scope.copy()
         with StringIO(expression) as stream:
             self.tokenizer = tokenize.generate_tokens(stream.readline)
             token, value = self.__parse_expression(self.__next_token())
@@ -134,8 +123,53 @@ class GenesisIntepreter:
             self.tokenizer = None
             return value
 
-    def parse_identifier(self, next_token):
-        """Retrieve a fully qualified identifier from the token stream."""
+    def __get_reference(self, identifier):
+        """
+        Retrieve a reference to an identifier.
+
+        The reference might be used for both read and assignment.
+        """
+        objname, *member = identifier.split(".")
+        if objname == "self":
+            objname = member[0]
+            member = member[1:]
+
+        obj = self.__scope.get("caller")
+        if obj is None:
+            obj = self.__game.get_object(objname)
+        if not member:
+            if objname != obj.name:
+                return (obj, objname)
+            return (obj, None)
+
+        error_msg = "Member reference not implemented: %s" % identifier
+        raise NotImplementedError(error_msg)
+
+    def __parse_assignment(self, next_token):
+        """
+        Parse an assignment expression.
+
+        As with all parser functions, it receives the next_token and return
+        a tuple (next_token, value). The value for an assignment expression
+        is a tuple (assignment_operator, value).
+
+        The grammar for the assignment expression is:
+            assignment_expression: [assignment_operator expression]
+        """
+        token, oper, *_ = next_token
+        result = None
+        if token == tokenize.OP and oper in GenesisIntepreter.assignment_ops:
+            next_token, value = self.__parse_expression(self.__next_token())
+            result = (oper, value)
+        return next_token, result
+
+    def __parse_identifier(self, next_token):
+        """
+        Retrieve a fully qualified identifier from the token stream.
+
+        The grammar is:
+            qualified_identifier : identifier [. identifier]*
+        """
         qualified_id = []
         while next_token[0] == tokenize.NAME:
             if next_token[1] in GenesisIntepreter.commands:
@@ -150,59 +184,110 @@ class GenesisIntepreter:
                 next_token = self.__next_token()
         return next_token, ".".join(qualified_id)
 
-    def __perform_operation(self, data, value):  # pylint: disable=no-self-use
-        if data is not None:
-            operation, rhs = data
-            value = GenesisIntepreter.operations[operation](value, rhs)
+    @staticmethod
+    def __perform_operation(oper_rhs, lhs):
+        """
+        Ensure an operaton with the form `lhs operator rhs` is executed.
+
+        `oper_rhs` is a tuple, containing an operator and the right hand side
+        value. `lhs` is the left hand side value. If `oper_rhs` is None, `lhs`
+        is returned as the result of the operation.
+        """
+        value = lhs
+        if oper_rhs is not None:
+            operation, rhs = oper_rhs
+            value = GenesisIntepreter.operations[operation](lhs, rhs)
         return value
 
     def __parse_expression(self, next_token):
+        """
+        Parse an expression.
+
+        Grammar:
+            expression: term expression'
+        """
         next_token, value = self.__parse_term(next_token)
         next_token, data = self.__parse_expression_prime(next_token)
-        value = self.__perform_operation(data, value)
+        value = GenesisIntepreter.__perform_operation(data, value)
         return next_token, value
 
     def __parse_expression_prime(self, next_token):
+        """
+        Parse an expression'.
+
+        Grammar:
+            expression': ["+|-" term expression']
+        """
         token, oper, *_ = next_token
         if token == tokenize.OP and oper in ["+", "-"]:
             next_token, value = self.__parse_term(self.__next_token())
             next_token, data = self.__parse_expression_prime(next_token)
-            value = self.__perform_operation(data, value)
+            value = GenesisIntepreter.__perform_operation(data, value)
             return next_token, (oper, value)
 
         return next_token, None
 
     def __parse_term(self, next_token):
+        """
+        Parse a term.
+
+        Grammar:
+            term: factor term'
+        """
         next_token, value = self.__parse_factor(next_token)
         next_token, data = self.__parse_term_prime(next_token)
-        value = self.__perform_operation(data, value)
+        value = GenesisIntepreter.__perform_operation(data, value)
         return next_token, value
 
     def __parse_term_prime(self, next_token):
+        """
+        Parse a term'.
+
+        Grammar:
+            term': ["*|/|//|%" factor term']
+        """
         token, oper, *_ = next_token
-        if token == tokenize.OP and oper in ["*", "/", "//", "%", "^"]:
+        if token == tokenize.OP and oper in ["*", "/", "//", "%"]:
             next_token, value = self.__parse_factor(self.__next_token())
             next_token, data = self.__parse_term_prime(next_token)
-            value = self.__perform_operation(data, value)
+            value = GenesisIntepreter.__perform_operation(data, value)
             return next_token, (oper, value)
         return next_token, None
 
     def __parse_factor(self, next_token):
+        """
+        Parse a factor.
+
+        Grammar:
+            factor: number factor'
+        """
         next_token, value = self.__parse_number(next_token)
         next_token, data = self.__parse_factor_prime(next_token)
-        value = self.__perform_operation(data, value)
+        value = GenesisIntepreter.__perform_operation(data, value)
         return next_token, value
 
     def __parse_factor_prime(self, next_token):
+        """
+        Parse a factor'.
+
+        Grammar:
+            factor': ["**" number factor']
+        """
         token, oper, *_ = next_token
         if token == tokenize.OP and oper in ["**"]:
             next_token, value = self.__parse_number(None)
             next_token, data = self.__parse_factor_prime(next_token)
-            value = self.__perform_operation(data, value)
+            value = GenesisIntepreter.__perform_operation(data, value)
             return next_token, (oper, value)
         return next_token, None
 
     def __parse_number(self, next_token):
+        """
+        Parse a number.
+
+        Grammar:
+            number: literal_number | "(" expression ")" | identifier
+        """
         token, val, *_ = next_token
         if token == tokenize.NUMBER:
             value = GenesisIntepreter.as_number(val)
@@ -218,33 +303,30 @@ class GenesisIntepreter:
             else:
                 raise Exception("Expected '(' got '%s'." % val)
         elif token == tokenize.NAME:
-            next_token, value = self.__parse_number_from_name(next_token)
+            next_token, value = self.__get_value_from_name(next_token)
         else:
             raise Exception("Invalid element `%s`." % val)
         return next_token, value
 
-    def __parse_number_from_name(self, next_token):
+    def __get_value_from_name(self, next_token):
+        """
+        Return the value for a parsed fully qualified identifier.
+
+        If the identifier parsed is a language command, return the result of
+        its execution.
+        """
         # TODO: Currently only parsing properties, could also parse methods.
-        next_token, qualified_id = self.parse_identifier(next_token)
+        next_token, qualified_id = self.__parse_identifier(next_token)
         if qualified_id in GenesisIntepreter.commands:
             cmdname = GenesisIntepreter.commands[qualified_id]
             cmd = getattr(self, cmdname)
             next_token, value = cmd(next_token, __command__=qualified_id)
         else:
-            obj, *parts = qualified_id.split(".")
-            if obj not in self.__extra_parameters:
-                value = self.__game.get_object_value(qualified_id)
-            else:
-                obj = self.__extra_parameters[obj]
-                for part in parts:
-                    if part not in obj:
-                        msg = "Undefined identifier %s" % qualified_id
-                        raise Exception(msg)
-                    obj = obj[part]
-                value = obj
+            value = self.__get_object_property(qualified_id)
         return next_token, value
 
     def __next_token(self):
+        """Retrieve the next token."""
         try:
             token = next(self.tokenizer)
             while token[0] == tokenize.NEWLINE:
@@ -253,22 +335,37 @@ class GenesisIntepreter:
         except Exception:  # pylint: disable=broad-except
             return None
 
-    def __parse_object_property(self, next_token):
-        """Parse an object property."""
-        if next_token[0] == tokenize.NAME:
-            next_token, identifier = self.parse_identifier(next_token)
+    def __get_object_property(self, identifier):
+        """Retrieve the value of an object property."""
+        value = None
+        try:
+            value = self.__game.get_object_value(identifier)
+        except Exception:  # pylint: disable=broad-except
             try:
-                list_of_items = self.__game.get_object_value(identifier)
+                object_ref, member_name = self.__get_reference(identifier)
+                if self.__scope.get("name") == object_ref:
+                    value = self.__scope.get(member_name)
+                elif hasattr(object_ref, member_name):
+                    value = getattr(object_ref, member_name)(**self.__scope)
+                elif hasattr(self.__game, member_name):
+                    value = getattr(self.__game, member_name)(**self.__scope)
+                else:
+                    value = self.__get_value_from_local_scope(identifier)
             except Exception:  # pylint: disable=broad-except
-                data = self.__extra_parameters
-                for part in identifier.split("."):
-                    if part not in data:
-                        raise Exception(
-                            "Could not find value for `%s`" % identifier
-                        )
-                    data = data[part]
-                list_of_items = data
-        return next_token, list_of_items
+                value = self.__get_value_from_local_scope(identifier)
+        return value
+
+    def __get_value_from_local_scope(self, identifier):
+        """Retrieve value for a fully qualified name from local scope."""
+        data = self.__scope.copy()
+        parts = identifier.split(".")
+        if self.__scope.get("name") == parts[0]:
+            parts = parts[1:]
+        for part in parts:
+            if part not in data:
+                raise Exception("Could not find value for `%s`" % identifier)
+            data = data[part]
+        return data
 
     def __parse_list(self, next_token):
         """Parse a list of itens. ("(items...)" or "[items...]")."""
@@ -302,6 +399,7 @@ class GenesisIntepreter:
 
     @staticmethod
     def __assert_identifier(token, expected=None):
+        """Assert that an identifier parsed has the expected value."""
         token_type, val, *_ = token
         if token_type != tokenize.NAME:
             raise Exception("Expected identifier. Got `%s`." % val)
@@ -311,21 +409,27 @@ class GenesisIntepreter:
             )
         return val
 
-    def unexpected_command(self, *_args, **params):
-        # pylint: disable=no-self-use
-        """Raise an exception due to unexpected command found."""
-        raise Exception(
-            "Unexpected command: `%s`" % params.get("__command__", "UNKNOWN")
-        )
-
     def __parse_object_property_or_list(self, next_token):
+        """
+        Parse a list of values.
+
+        grammar:
+            list_of_values: "(" item [, item]* ")" | identifier
+        """
         if next_token[0] == tokenize.NAME:
-            next_token, items = self.__parse_object_property(next_token)
+            next_token, identifier = self.__parse_identifier(next_token)
+            items = self.__get_object_property(identifier)
         else:
             next_token, items = self.__parse_list(next_token)
         return next_token, items
 
     def __parse_list_in_list(self, next_token):
+        """
+        Parse the `in` part of commands.
+
+        grammar:
+            list_in_list: list_of_values "in" list_of_values
+        """
         next_token, items = self.__parse_object_property_or_list(next_token)
         GenesisIntepreter.__assert_identifier(next_token, "in")
         next_token = self.__next_token()
@@ -334,7 +438,7 @@ class GenesisIntepreter:
 
     # ---- language commands
 
-    def parse_command_all(self, next_token, **_):
+    def _parse_command_all(self, next_token, **_):
         """Parse and evaluate command: `all <list> in <list>`."""
         next_token, (needle, search) = self.__parse_list_in_list(next_token)
         for value in needle:
@@ -345,7 +449,7 @@ class GenesisIntepreter:
             value = True
         return next_token, value
 
-    def parse_command_any(self, next_token, **_):
+    def _parse_command_any(self, next_token, **_):
         """Parse and evaluate command: `all <list> in <list>`."""
         next_token, (needle, search) = self.__parse_list_in_list(next_token)
         for value in needle:
@@ -355,3 +459,10 @@ class GenesisIntepreter:
         else:
             value = False
         return next_token, value
+
+    def _unexpected_command(self, *_args, **params):
+        """Raise an exception due to unexpected command found."""
+        # pylint: disable=no-self-use
+        raise Exception(
+            "Unexpected command: `%s`" % params.get("__command__", "UNKNOWN")
+        )

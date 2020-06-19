@@ -19,35 +19,23 @@
 
 """Basic Game Object."""
 
-from collections import defaultdict
-
 import logging
 
+from genesis.engine.events import EventPublisher
 
 logger = logging.getLogger("genesis_gds")
 
 
-class GameObject:
+class GameObject(EventPublisher):
     """Base class of all game objects."""
 
     def __init__(self, **options):
         """Initialize basic object sructure."""
+        EventPublisher.__init__(self)
         if options["name"] in ["level", "game"]:
             raise Exception("Invalid object name: `%s`" % options["name"])
         self.__name = options["name"]
         self.__game = options["game"]
-        self.__observers = defaultdict(list)
-
-    def subscribe(self, event, observer):
-        """Register an observer object to an event name."""
-        if observer not in self.__observers[event]:
-            self.__observers[event].append(observer)
-
-    def emit(self, event):
-        """Emit event notification to observer."""
-        logger.debug(msg="Notifying event: {}".format(event.name))
-        for observer in self.__observers[event.event]:
-            observer.notify(event)
 
     def modify_result_of(self, actual, method):
         """Allow a method to process and modify the result of another one."""

@@ -56,36 +56,38 @@
     ],
     "levels": [
       {
-        "single": {
-          "start": [
-            {
-              "spawn": [
-                {
-                  "object_name": "ball"
-                }
-              ]
-            }
-          ],
-          "events": [
-            {
-              "time": [
-                {
-                  "when": "30s",
-                  "do": "game_over"
-                }
-              ]
-            },
-            {
-              "repeat": [
-                {
-                  "start": "5s",
-                  "every": "3s",
-                  "do": "ball.color = function.choice([(255,0,0), (0,255,0), (0,0,255)])"
-                }
-              ]
-            }
-          ]
-        }
+        "single": [
+          {
+            "start": [
+              {
+                "do": [
+                  {
+                    "spawn": {
+                      "object_name": "ball"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "time": [
+              {
+                "when": 30,
+                "do": "game_over"
+              }
+            ]
+          },
+          {
+            "repeat": [
+              {
+                "after": "5s",
+                "every": "3s",
+                "do": "ball.color = function.choice([(255,0,0), (0,255,0), (0,0,255)])"
+              }
+            ]
+          }
+        ]
       }
     ]
   }

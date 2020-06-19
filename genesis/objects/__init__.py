@@ -20,4 +20,3 @@
 """Initialize genesis.object module."""
 
 from genesis.objects.gameobject import GameObject  # noqa: F401
-from genesis.objects.gameevent import GameEvent  # noqa: F401

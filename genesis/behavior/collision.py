@@ -22,7 +22,7 @@
 import logging
 from math import sin, cos, atan2, copysign, radians, degrees
 
-from genesis.objects import GameEvent
+from genesis.engine.events import GameEvent
 
 
 logger = logging.getLogger("genesis_gsd")
@@ -104,7 +104,7 @@ class Collider:
                             event_data = {"point": point, "angle": angle}
                             event = GameEvent(
                                 self,
-                                event="collision",
+                                name="collision",
                                 against=[obj.name],
                                 **event_data,
                             )
@@ -112,7 +112,7 @@ class Collider:
                             event_data = {"point": point, "angle": angle + 180}
                             event = GameEvent(
                                 obj,
-                                event="collision",
+                                name="collision",
                                 against=[self.name],
                                 **event_data,
                             )

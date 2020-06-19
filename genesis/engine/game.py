@@ -22,12 +22,15 @@
 import sys
 import logging
 import importlib
+from collections import defaultdict
+
 import pygame  # pylint: disable=import-error
 
 from genesis.errors import ClassNotFoundError
+from genesis.behavior.basic import Drawable
 from genesis.engine.screen import Screen
 from genesis.engine.interpreter import GenesisIntepreter
-from genesis.behavior.basic import Drawable
+from genesis.engine.events import EventPublisher, GameEvent
 
 
 logger = logging.getLogger("genesis_gds")
@@ -71,7 +74,7 @@ class Game:
         self.__fps = options.get("fps", 30)
         self.__game_classes = {}
         self.__levels = []
-        self.event_handlers = {}
+        self.event_handlers = defaultdict(dict)
         self.screen = self.__create_screen()
         self.game_objects = [self.screen, self]
         self.__name = "game"
@@ -140,15 +143,33 @@ class Game:
         # else: player won the game.
         # otherwise, player lost the game.
 
+    @staticmethod
+    def __parse_behaviors(object_behaviors):
+        """Parse object_behaviors used by __looad_object_classes()."""
+        classes = []
+        events = {}
+        parameters = {}
+        for behavior in object_behaviors:
+            classname = next(iter(behavior))
+            classes.append(Game.__load_class("%s" % classname))
+            for attributes in [attr or {} for attr in behavior.values()]:
+                if attributes and "events" in attributes:
+                    for event_description in attributes["events"]:
+                        events.update(event_description)
+                    del attributes["events"]
+                parameters.update(attributes)
+
+        return (classes, events, parameters)
+
     def __load_object_classes(self):
         """Create game objects."""
         # TODO: document this method.
         for object_item in self.__script.get("game.objects"):
             global_events = {}
             name = next(iter(object_item))
-            object_behaviors = object_item[name]["behaviors"]
-            if "GameObject" not in object_behaviors:
-                object_behaviors.insert(
+            behaviors = object_item[name]["behaviors"]
+            if "GameObject" not in behaviors:
+                behaviors.insert(
                     0,
                     {
                         "genesis.objects.GameObject": {
@@ -157,55 +178,31 @@ class Game:
                         }
                     },
                 )
-            classes = []
-            events = {}
-            parameters = {}
-            for behavior in object_behaviors:
-                classname = next(iter(behavior))
-                classes.append(Game.__load_class("%s" % classname))
-                for attributes in [attr or {} for attr in behavior.values()]:
-                    if attributes and "events" in attributes:
-                        for event_description in attributes["events"]:
-                            events.update(event_description)
-                        del attributes["events"]
-                    parameters.update(attributes)
+            classes, events, parameters = Game.__parse_behaviors(behaviors)
             global_events[name] = events
             self.__game_classes[name] = (tuple(classes), parameters)
             for events in global_events.values():
-                for event, actions in events.items():
-                    self.event_handlers[event] = {name: actions}
+                for event_name, actions in events.items():
+                    self.add_event(name, event_name, actions)
+
+    def add_event(self, object_name, name, actions):
+        """Add an event to the game event set."""
+        self.event_handlers[object_name].update({name: actions})
 
     def notify(self, event):
         """Receive object notification."""
-        if event.name in self.event_handlers:
-            emitters = self.event_handlers[event.name]
-            if event.sender.name in emitters:
-                params = {
-                    "object": event.sender,
-                    event.name: event,
-                    "actions": emitters[event.sender.name],
-                }
+        if event.sender.name in self.event_handlers:
+            emitters = self.event_handlers[event.sender.name]
+            if event.name in emitters:
                 # NOTE: this could be in another thread!
-                self.__process_event_code(params)
+                for action in emitters[event.name]:
+                    self.execute_action(event.sender, action.copy(), event)
 
     def tick(self):
         """Ensure game loop executes, at most, the configured times per sec."""
         self.__clock.tick(self.__fps)
 
-    def __process_event_code(self, params):  # pylint: disable=no-self-use
-        """Run event code."""
-
-        def get_param(name, params):
-            data = params[name]
-            del params[name]
-            return data
-
-        sender = get_param("object", params)
-        actions = get_param("actions", params)
-        for action in actions:
-            self.execute_action(sender, action.copy(), params)
-
-    def execute_action(self, obj, action, params):
+    def execute_action(self, caller, action, event):
         """Execute action code."""
         logger.debug(msg="ACTION: {}".format(action))
         execute = True
@@ -213,17 +210,34 @@ class Game:
         if isinstance(statements, str):
             statements = [statements]
         del action["do"]
+        extra_args = event.as_dict()
         if "when" in action:
             logger.debug(msg="Evaluating `when`: {}".format(action["when"]))
             execute = self.interpreter.evaluate_expression(
-                action["when"], **params
+                action["when"], **extra_args
             )
             del action["when"]
         if execute:
-            params["caller"] = obj
-            for statement in statements:
-                logger.debug(msg="Executing statement: {}".format(statement))
-                self.interpreter.execute(statement, **params)
+            self.execute_statements(caller, statements, **extra_args)
+
+    def execute_statements(self, caller, statements, **scope):
+        """Execute the list of statements."""
+        scope["caller"] = caller
+        calls = None
+        for statement in statements:
+            logger.debug(msg="Executing statement: {}".format(statement))
+            if isinstance(statement, dict):
+                if len(statement) != 1:
+                    raise Exception("Multiple event action: " % statement)
+                statement, calls = next(iter(statement.items()))
+            if calls:
+                if not isinstance(calls, list):
+                    calls = [calls]
+                for call in calls:
+                    call.update(**scope)
+                    self.interpreter.execute(statement, **call)
+            else:
+                self.interpreter.execute(statement, **scope)
 
     def get_object_value(self, name):
         """Return a `value` for an item."""
@@ -285,11 +299,9 @@ class Game:
         start_values.update({"name": object_name, "game": self})
         obj = object_to_spawn(**start_values)
         self.game_objects.append(obj)
-
-        for event, handlers in self.event_handlers.items():
-            actions = handlers.get(obj.name, None)
-            if actions:
-                obj.subscribe(event, self)
+        object_handlers = self.event_handlers.get(object_name, {})
+        for event in object_handlers.keys():
+            obj.subscribe(event, self)
 
     @staticmethod
     def __load_class(classname):
@@ -306,15 +318,19 @@ class Game:
             raise ClassNotFoundError(classname)
 
 
-class Level:
+class Level(EventPublisher):
     """A level in a game."""
 
-    def __init__(self, name, game, description):
+    def __init__(self, name, game, events):
         """Initialize the level object."""
+        EventPublisher.__init__(self)
         self.__name = name
         self.__running = True
         self.game = game
-        self.__description = description
+        for event in events:
+            for event_name, actions in event.items():
+                self.game.add_event(name, event_name, actions)
+                self.subscribe(event_name, self.game)
 
     @property
     def name(self):
@@ -326,16 +342,8 @@ class Level:
 
     def start(self):
         """Start level."""
-        start_ops = self.__description.get("start", [])
-        for operation in start_ops:
-            for method, instances in operation.items():
-                for scope in [self, self.game]:
-                    if hasattr(scope, method):
-                        for params in instances:
-                            getattr(scope, method)(**params, level=self)
-                        break
-                else:
-                    raise Exception("Operation `%s` not defined." % operation)
+        sender = self.sender_instance(name=self.name)
+        self.emit(GameEvent(sender, name="start"))
 
     def finish(self):
         """Finish level."""

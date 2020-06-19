@@ -38,35 +38,34 @@ game:
                     - angle = collision.angle
   levels:
   - single:
-      start:
-      - spawn:
-        - object_name: ball
-          position: [300, 200]
-          color: [255, 0, 255]
-          speed: 15
-          angle: 27
-        - object_name: ball
-          position: [50, 250]
-          color: [255, 255, 0]
-          speed: 20
-          angle: 93
-        - object_name: ball
-          position: [300, 50]
-          color: [0, 255, 255]
-          speed: 12
-          angle: 150
-        - object_name: ball
-          position: [100, 150]
-          color: [255, 255, 255]
-          speed: 10
-          angle: 193
-      events:
-      - time:
-        - when: 30s
-          do:
-            - game_over
-      - repeat:
-        - start: 5s
-          every: 3s
-          do:
-            -ball.color = function.choice([(255,0,0), (0,255,0), (0,0,255)])
+    - start:
+      - do:
+        - spawn:
+          - object_name: ball
+            position: [300, 200]
+            color: [255, 0, 255]
+            speed: 15
+            angle: 27
+          - object_name: ball
+            position: [50, 250]
+            color: [255, 255, 0]
+            speed: 20
+            angle: 93
+          - object_name: ball
+            position: [300, 50]
+            color: [0, 255, 255]
+            speed: 12
+            angle: 150
+          - object_name: ball
+            position: [100, 150]
+            color: [255, 255, 255]
+            speed: 10
+            angle: 193
+    # - time:
+    #   - when: 30s
+    #     do: game_over
+    #   - repeat:
+    #     - start: 5s
+    #       every: 3s
+    #       do:
+    #         -ball.color = function.choice([(255,0,0), (0,255,0), (0,0,255)])
