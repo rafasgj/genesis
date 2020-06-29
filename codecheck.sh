@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 # This file is part of f/π
 #
@@ -51,7 +51,7 @@ verify_black() {
 
 verify_flake8() {
     echo -n "Runing flake8... "
-    ${PYTHON} -m 'flake8' $*
+    ${PYTHON} -m flake8 $*
     res=$?
     echo "done."
     return $res
@@ -61,7 +61,7 @@ verify_pylint() {
     MIN_SCORE=$1
     shift 1
     echo -n "pylint (you'll need a score of at least ${MIN_SCORE})... "
-    INT_VALUE=`echo "print(int(${MIN_SCORE}))" | python`
+    INT_VALUE=`echo "print(int(${MIN_SCORE}))" | ${PYTHON}`
     ${PYTHON} -m pylint -r y -s y --fail-under=${INT_VALUE} $*
     res=$?
     echo "done."
@@ -77,7 +77,7 @@ verify_code_format() {
     verify_pylint ${MIN_SCORE} ${FILES}
 }
 
-verify_yaml_syntax() {
+verify_yaml_syntax()  {
     failed=0
     while [ ! -z "$1" ]
     do
@@ -92,7 +92,7 @@ verify_yaml_syntax() {
 }
 
 ensure_python_virtualenv() {
-    PYTHON_ENV=$(python -c "import sys; print('yes' if hasattr(sys, 'real_prefix') else 'no')")
+    PYTHON_ENV=$(${PYTHON} -c "import sys; print('yes' if hasattr(sys, 'real_prefix') else 'no')")
 
     if [ "${PYTHON_ENV}" == "no" ]
     then
@@ -137,10 +137,11 @@ ensure_python_virtualenv
 
 install_required_packages
 
-echo "YAML ${CODECHECK_YAML[@]}"
-for YAML_FILE in ${CODECHECK_YAML[@]}
+for YAML_FILE in ${CODECHECK_YAML}
 do
-    verify_yaml_syntax "${YAML_FILE}"
+    echo -n "Checking YAML syntax for ${YAML_FILE}..."
+    verify_yaml_syntax ${YAML_FILE}
+    echo "DONE."
 done
 
 if [ "$1" == "--fast" -o "$1" == "-f" ]
